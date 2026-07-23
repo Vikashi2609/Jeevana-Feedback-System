@@ -8,6 +8,9 @@ import {
   listTeachers,
   upsertTeacher,
   deleteTeacher,
+  getSystemSettings,
+  updateSystemSettings,
+  refreshStudentScreens,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/admin")({
@@ -135,15 +138,124 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<"responses" | "teachers">("responses");
+  const [settings, setSettings] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+  getSystemSettings()
+    .then((r) => setSettings(r.settings))
+    .catch((e) => console.error(e));
+}, []);
+async function saveSettings() {
+  if (!settings) return;
 
-  async function logout() {
-    try { await adminLogout(); } catch { /* ignore */ }
-    onLogout();
+  setSaving(true);
+
+  try {
+    await updateSystemSettings({
+      data: {
+        evaluation_open: settings.evaluation_open,
+        refresh_version: settings.refresh_version,
+        show_vi: settings.show_vi,
+        show_vii: settings.show_vii,
+        show_viii: settings.show_viii,
+        show_ix: settings.show_ix,
+        show_x: settings.show_x,
+        show_xi: settings.show_xi,
+      },
+    });
+    // 🔹 Reload the latest settings from the database
+    const r = await getSystemSettings();
+    setSettings(r.settings);
+
+    alert("Settings saved");
+  } catch (e) {
+    console.error(e);
+    alert("Failed to save settings");
+  } finally {
+    setSaving(false);
   }
+}
+
+async function logout() {
+  try {
+    await adminLogout();
+  } catch {
+    // ignore
+  }
+  onLogout();
+}
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl px-4 py-6">
+      {settings && (
+  <div className="mb-5 rounded-xl border bg-white p-4 shadow-sm">
+    <h2 className="font-semibold text-lg mb-3">
+      Evaluation Controls
+    </h2>
+
+    <label className="flex items-center gap-2 mb-3">
+      <input
+        type="checkbox"
+        checked={settings.evaluation_open}
+        onChange={(e) =>
+          setSettings({
+            ...settings,
+            evaluation_open: e.target.checked,
+          })
+        }
+      />
+      Evaluation Open
+    </label>
+
+    <div className="grid grid-cols-3 gap-3 mb-4">
+      {[
+        ["show_vi", "VI"],
+        ["show_vii", "VII"],
+        ["show_viii", "VIII"],
+        ["show_ix", "IX"],
+        ["show_x", "X"],
+        ["show_xi", "XI"],
+      ].map(([key, label]) => (
+        <label key={key} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={settings[key]}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                [key]: e.target.checked,
+              })
+            }
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+
+    <button
+      onClick={() => void saveSettings()}
+      disabled={saving}
+      className="rounded-lg bg-blue-600 px-4 py-2 text-white"
+    >
+      {saving ? "Saving..." : "Save"}
+    </button>
+  </div>
+)}
+<button
+  onClick={async () => {
+    try {
+      await refreshStudentScreens();
+      alert("Student screens refreshed.");
+    } catch (e) {
+      console.error(e);
+      alert("Refresh failed.");
+    }
+  }}
+  className="mt-6 w-full rounded-lg bg-indigo-600 text-white py-2 font-semibold hover:bg-indigo-700"
+>
+  🔄 Refresh All Student Screens
+</button>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <TabBtn active={tab === "responses"} onClick={() => setTab("responses")}>Responses</TabBtn>

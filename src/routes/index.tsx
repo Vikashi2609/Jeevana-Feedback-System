@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CLASSES, QUESTIONS, type ClassName } from "@/lib/evaluation-config";
 import { getClassMeta, submitFeedback } from "@/lib/feedback.functions";
+import { getSystemSettings } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -84,6 +85,7 @@ function StepChip({ active, done, label }: { active: boolean; done: boolean; lab
 
 function FeedbackApp() {
   const [step, setStep] = useState<Step>("class");
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [className, setClassName] = useState<ClassName | null>(null);
   const [classMeta, setClassMeta] = useState<ClassMeta | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
@@ -109,7 +111,33 @@ function FeedbackApp() {
       /* ignore storage errors */
     }
   }, []);
+  useEffect(() => {
+  getSystemSettings()
+    .then((r) => setSystemSettings(r.settings))
+    .catch(console.error);
+}, []);
+useEffect(() => {
+  if (!systemSettings) return;
 
+  const interval = setInterval(async () => {
+    try {
+      const latest = await getSystemSettings();
+
+      if (
+        latest.settings.refresh_version !==
+        systemSettings.refresh_version
+      ) {
+        console.log(">>> REFRESH SHOULD HAPPEN <<<");
+localStorage.removeItem(SUBMITTED_FLAG);
+window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [systemSettings]);
   const sectionMeta = section && classMeta ? classMeta.bySection[section] : null;
   const optChoices = sectionMeta && sectionMeta.optional.length > 1 ? sectionMeta.optional : [];
 
@@ -234,7 +262,22 @@ function FeedbackApp() {
       setSubmitting(false);
     }
   }
+if (systemSettings && !systemSettings.evaluation_open) {
+  return (
+    <Shell>
+      <div className="rounded-3xl bg-white border border-indigo-100 shadow-xl p-10 text-center">
+        <h2 className="text-3xl font-bold text-indigo-900">
+          Teacher Evaluation Closed
+        </h2>
 
+        <p className="mt-4 text-slate-600">
+          The evaluation is currently closed.
+          Please contact the admin.
+        </p>
+      </div>
+    </Shell>
+  );
+}
   if (step === "done") {
     return (
       <Shell>
@@ -265,7 +308,20 @@ function FeedbackApp() {
       {step === "class" && (
         <Card title="Select your class">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {CLASSES.map((c) => (
+            {CLASSES.filter((c) => {
+  if (!systemSettings) return true;
+
+  const map: Record<string, boolean> = {
+    VI: systemSettings.show_vi,
+    VII: systemSettings.show_vii,
+    VIII: systemSettings.show_viii,
+    IX: systemSettings.show_ix,
+    X: systemSettings.show_x,
+    XI: systemSettings.show_xi,
+  };
+
+  return map[c] ?? true;
+}).map((c) => (
               <button
                 key={c}
                 onClick={() => void pickClass(c)}

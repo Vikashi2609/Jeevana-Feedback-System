@@ -143,3 +143,84 @@ export const deleteTeacher = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+export const getSystemSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireAdmin } = await import("./admin-session.server");
+  await requireAdmin();
+
+  const sb = serverAdminClient();
+
+  const { data, error } = await sb
+    .from("system_settings")
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return { settings: data };
+});
+
+
+const systemSettingsSchema = z.object({
+  evaluation_open: z.boolean(),
+  refresh_version: z.number().int(),
+  show_vi: z.boolean(),
+  show_vii: z.boolean(),
+  show_viii: z.boolean(),
+  show_ix: z.boolean(),
+  show_x: z.boolean(),
+  show_xi: z.boolean(),
+});
+export const refreshStudentScreens = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const { requireAdmin } = await import("./admin-session.server");
+    await requireAdmin();
+
+    const sb = serverAdminClient();
+
+    const { data, error } = await sb
+      .from("system_settings")
+      .select("refresh_version")
+      .eq("id", 1)
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    const { error: updateError } = await sb
+      .from("system_settings")
+      .update({
+        refresh_version: (data?.refresh_version ?? 0) + 1,
+      })
+      .eq("id", 1);
+
+    if (updateError) throw new Error(updateError.message);
+
+    return { ok: true };
+  });
+
+export const updateSystemSettings = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => systemSettingsSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session.server");
+    await requireAdmin();
+
+    const sb = serverAdminClient();
+
+    const { error } = await sb
+      .from("system_settings")
+      .update({
+        evaluation_open: data.evaluation_open,
+        refresh_version: data.refresh_version,
+        show_vi: data.show_vi,
+        show_vii: data.show_vii,
+        show_viii: data.show_viii,
+        show_ix: data.show_ix,
+        show_x: data.show_x,
+        show_xi: data.show_xi,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+
+    if (error) throw new Error(error.message);
+
+    return { ok: true };
+  });
