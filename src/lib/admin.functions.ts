@@ -224,3 +224,68 @@ export const updateSystemSettings = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
+  export const getReportDownloadUrl = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) =>
+    z.object({
+      teacher: z.string(),
+      format: z.enum(["pdf", "xlsx"]),
+    }).parse(d)
+  )
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session.server");
+    await requireAdmin();
+    const sb = serverAdminClient();
+
+    const extension = data.format === "pdf" ? "pdf" : "xlsx";
+    const path = `teacher-reports/${data.teacher}/${data.teacher}_Report.${extension}`;
+
+    // Try the standard path first
+    let { data: signedData, error } = await sb
+      .storage
+      .from("teacher-reports")
+      .createSignedUrl(path, 300); // 5 minutes
+
+    if (error) {
+      // Fallback: try without "_Report" suffix
+      const altPath = `teacher-reports/${data.teacher}/${data.teacher}.${extension}`;
+      const alt = await sb.storage.from("teacher-reports").createSignedUrl(altPath, 300);
+      if (alt.error) throw new Error(`Report not found for ${data.teacher}`);
+      return { url: alt.data.signedUrl };
+    }
+
+    return { url: signedData.signedUrl };
+  });
+
+export const getBatchReportZip = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({
+      teachers: z.array(z.string()),
+      formats: z.array(z.enum(["pdf", "xlsx"])),
+    }).parse(d)
+  )
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session.server");
+    await requireAdmin();
+    const sb = serverAdminClient();
+
+    // Collect all files and zip them server-side using the storage API
+    // For now, return individual URLs — the frontend will handle zipping
+    const results: { teacher: string; format: string; url: string }[] = [];
+
+    for (const teacher of data.teachers) {
+      for (const format of data.formats) {
+        const ext = format === "pdf" ? "pdf" : "xlsx";
+        const path = `teacher-reports/${teacher}/${teacher}_Report.${ext}`;
+        const { data: signed, error } = await sb
+          .storage
+          .from("teacher-reports")
+          .createSignedUrl(path, 600);
+
+        if (!error && signed?.signedUrl) {
+          results.push({ teacher, format, url: signed.signedUrl });
+        }
+      }
+    }
+
+    return { files: results };
+  });

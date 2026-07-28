@@ -13,27 +13,52 @@ supabase: Client = create_client(url, key)
 REPORTS_BUCKET = "teacher-reports"
 
 
-def get_teacher_responses(teacher):
-    response = (
-        supabase
-        .table("responses")
-        .select("*")
-        .eq("teacher", teacher)
-        .execute()
-    )
+PAGE_SIZE = 1000
 
-    return response.data
+
+def _fetch_all_rows(query_builder):
+    """
+    Supabase/PostgREST caps a single request at 1000 rows by default.
+    This fetches every page until a page comes back smaller than PAGE_SIZE.
+    query_builder: a function that takes (start, end) and returns a Supabase query
+                   with .range(start, end) applied, ready to .execute().
+    """
+    all_rows = []
+    start = 0
+    while True:
+        end = start + PAGE_SIZE - 1
+        response = query_builder(start, end).execute()
+        page = response.data
+        all_rows.extend(page)
+        if len(page) < PAGE_SIZE:
+            break
+        start += PAGE_SIZE
+    return all_rows
+
+
+def get_teacher_responses(teacher):
+    rows = _fetch_all_rows(
+        lambda start, end: (
+            supabase
+            .table("responses")
+            .select("*")
+            .eq("teacher", teacher)
+            .range(start, end)
+        )
+    )
+    return rows
 
 
 def get_all_teachers():
-    response = (
-        supabase
-        .table("responses")
-        .select("teacher")
-        .execute()
+    rows = _fetch_all_rows(
+        lambda start, end: (
+            supabase
+            .table("responses")
+            .select("teacher")
+            .range(start, end)
+        )
     )
-
-    teachers = sorted(set(row["teacher"] for row in response.data))
+    teachers = sorted(set(row["teacher"] for row in rows))
     return teachers
 
 

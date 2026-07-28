@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import sys
+import time 
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -235,17 +236,18 @@ def _build_summary_sheet(wb, data, class_rows):
     # ---- Native chart: average rating per question ----
     if len(data["distribution"]) > 0:
         cats = Reference(ws, min_col=1, min_row=q_first_data_row, max_row=q_last_data_row)
-        vals = Reference(ws, min_col=8, min_row=q_start, max_row=q_last_data_row)  # includes header for name
+        vals = Reference(ws, min_col=8, min_row=q_start, max_row=q_last_data_row)
         chart = BarChart()
         chart.type = "bar"
         chart.title = "Overall Average Rating per Question"
-        chart.y_axis.title = None
+        chart.y_axis.title = "Question"
         chart.x_axis.title = "Average (out of 5)"
         chart.height = 10
         chart.width = 16
         chart.gapWidth = 50
         chart.add_data(vals, titles_from_data=True)
         chart.set_categories(cats)
+        chart.y_axis.reverseOrder = True  # Q1 at top
         chart.series[0].graphicalProperties.solidFill = NAVY
         chart.series[0].graphicalProperties.line.noFill = True
         chart.legend = None
@@ -324,27 +326,40 @@ def _build_class_sheet(wb, sheet_name, class_key, rows, comments):
     last_data_row = first_data_row + n_questions - 1
 
     # ---- 100%-stacked distribution chart, using the % columns ----
+    # First, fix the percentage headers to be chart-friendly
+    rating_labels = {5: "5 ★", 4: "4 ★", 3: "3 ★", 2: "2 ★", 1: "1 ★"}
+    for j, k in enumerate([5, 4, 3, 2, 1]):
+        pct_col = 9 + j  # I, J, K, L, M
+        ws.cell(row=start, column=pct_col).value = rating_labels[k]
+    
     cats = Reference(ws, min_col=1, min_row=first_data_row, max_row=last_data_row)
     chart = BarChart()
     chart.type = "bar"
     chart.grouping = "percentStacked"
     chart.overlap = 100
-    chart.title = "Rating Distribution by Question"
+    chart.title = f"Rating Distribution — {cls}-{section} {subject}"
+    chart.y_axis.title = "Question"
+    chart.x_axis.title = "Percentage of Responses"
     chart.height = 9
     chart.width = 17
     chart.gapWidth = 50
     chart.legend.position = "r"
-
-    # add series in 1..5 order (bottom to top) so 5-star sits at the far end, matching PDF legend order
-    for j, rating in enumerate([1, 2, 3, 4, 5]):
-        col = 9 + (5 - rating)  # I=%5,J=%4,K=%3,L=%2,M=%1 -> map rating to its column
-        ref = Reference(ws, min_col=col, min_row=start, max_row=last_data_row)  # include header row for name
+    
+    # Add series in reverse order so 5★ appears at the far right of the stack
+    for rating in [1, 2, 3, 4, 5]:
+        col = 9 + (5 - rating)  # M=%1, L=%2, K=%3, J=%4, I=%5
+        ref = Reference(ws, min_col=col, min_row=start, max_row=last_data_row)
         chart.add_data(ref, titles_from_data=True)
         s = chart.series[-1]
         s.graphicalProperties.solidFill = RATING_COLORS[rating]
         s.graphicalProperties.line.noFill = True
+    
     chart.set_categories(cats)
-
+    chart.y_axis.reverseOrder = True  # Q1 at top
+    chart.x_axis.scaling.min = 0
+    chart.x_axis.scaling.max = 1
+    chart.x_axis.numFmt = "0%"
+    
     ws.add_chart(chart, f"A{last_data_row + 3}")
 
     # ---- comments ----
@@ -415,7 +430,18 @@ def create_teacher_workbook(teacher_data, out_dir="exports/Excel", recalc_script
     os.makedirs(out_dir, exist_ok=True)
     safe_name = "".join(ch for ch in teacher if ch.isalnum() or ch in (" ", "_", "-")).strip()
     out_path = os.path.join(out_dir, f"{safe_name}.xlsx")
-    wb.save(out_path)
+
+    # Retry with backoff to survive transient Windows file locks
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            wb.save(out_path)
+            break
+        except PermissionError:
+            if attempt < max_retries - 1:
+                time.sleep(1 * (attempt + 1))  # 1s, 2s, 3s backoff
+            else:
+                raise
 
     if recalc_script_path and os.path.exists(recalc_script_path):
         subprocess.run([sys.executable, recalc_script_path, out_path], check=False)

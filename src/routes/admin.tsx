@@ -142,316 +142,555 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<
-  "responses" | "teachers" | "reports"
->("responses");
+  const [tab, setTab] = useState<"responses" | "teachers" | "reports">("responses");
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [teacherSummary, setTeacherSummary] = useState<any[]>([]);
-const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
-const [teacherDetails, setTeacherDetails] = useState<any[]>([]);
-useEffect(() => {
-  getSystemSettings()
-    .then((r) => setSettings(r.settings))
-    .catch(console.error);
-}, []);
-useEffect(() => {
-  getTeacherSummary()
-    .then((r) => setTeacherSummary(r.teachers))
-    .catch(console.error);
-}, []);
-async function saveSettings() {
-  if (!settings) return;
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
+  const [teacherDetails, setTeacherDetails] = useState<any[]>([]);
+  
+  const loadTeacherSummary = () => {
+    getTeacherSummary()
+      .then((r) => setTeacherSummary(r.teachers))
+      .catch((err) => {
+        if (!(err instanceof Error && err.message === "Unauthorized")) {
+          console.error(err);
+        }
+      });
+  };
 
-  setSaving(true);
+  useEffect(() => {
+    loadTeacherSummary();
+  }, []);
 
-  try {
-    await updateSystemSettings({
-      data: {
-        evaluation_open: settings.evaluation_open,
-        refresh_version: settings.refresh_version,
-        show_vi: settings.show_vi,
-        show_vii: settings.show_vii,
-        show_viii: settings.show_viii,
-        show_ix: settings.show_ix,
-        show_x: settings.show_x,
-        show_xi: settings.show_xi,
-      },
-    });
-    // 🔹 Reload the latest settings from the database
-    const r = await getSystemSettings();
-    setSettings(r.settings);
-
-    alert("Settings saved");
-  } catch (e) {
-    console.error(e);
-    alert("Failed to save settings");
-  } finally {
-    setSaving(false);
+  useEffect(() => {
+    if (tab === "reports" && teacherSummary.length === 0) {
+      loadTeacherSummary();
+    }
+  }, [tab]);
+  async function saveSettings() {
+    if (!settings) return;
+    setSaving(true);
+    try {
+      await updateSystemSettings({
+        data: {
+          evaluation_open: settings.evaluation_open,
+          refresh_version: settings.refresh_version,
+          show_vi: settings.show_vi,
+          show_vii: settings.show_vii,
+          show_viii: settings.show_viii,
+          show_ix: settings.show_ix,
+          show_x: settings.show_x,
+          show_xi: settings.show_xi,
+        },
+      });
+      const r = await getSystemSettings();
+      setSettings(r.settings);
+      alert("Settings saved");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
-async function logout() {
-  try {
-    await adminLogout();
-  } catch {
-    // ignore
+  async function logout() {
+    try {
+      await adminLogout();
+    } catch {
+      // ignore
+    }
+    onLogout();
   }
-  onLogout();
-}
 
-const averageRating =
-  teacherDetails.length > 0
-    ? (
-        teacherDetails.reduce((total, r) => {
-          return (
-            total +
-            Number(r.q1) +
-            Number(r.q2) +
-            Number(r.q3) +
-            Number(r.q4) +
-            Number(r.q5) +
-            Number(r.q6) +
-            Number(r.q7) +
-            Number(r.q8) +
-            Number(r.q9) +
-            Number(r.q10)
-          );
-        }, 0) /
-        (teacherDetails.length * 10)
-      ).toFixed(2)
-    : "0.00";
+  const averageRating =
+    teacherDetails.length > 0
+      ? (
+          teacherDetails.reduce((total, r) => {
+            return (
+              total +
+              Number(r.q1) + Number(r.q2) + Number(r.q3) + Number(r.q4) + Number(r.q5) +
+              Number(r.q6) + Number(r.q7) + Number(r.q8) + Number(r.q9) + Number(r.q10)
+            );
+          }, 0) /
+          (teacherDetails.length * 10)
+        ).toFixed(2)
+      : "0.00";
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl px-4 py-6">
-      {settings && (
-  <div className="mb-5 rounded-xl border bg-white p-4 shadow-sm">
-    <h2 className="font-semibold text-lg mb-3">
-      Evaluation Controls
-    </h2>
+        {settings && (
+          <div className="mb-5 rounded-xl border bg-white p-4 shadow-sm">
+            <h2 className="font-semibold text-lg mb-3">Evaluation Controls</h2>
+            <label className="flex items-center gap-2 mb-3">
+              <input
+                type="checkbox"
+                checked={settings.evaluation_open}
+                onChange={(e) =>
+                  setSettings({ ...settings, evaluation_open: e.target.checked })
+                }
+              />
+              Evaluation Open
+            </label>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[
+                ["show_vi", "VI"],
+                ["show_vii", "VII"],
+                ["show_viii", "VIII"],
+                ["show_ix", "IX"],
+                ["show_x", "X"],
+                ["show_xi", "XI"],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={settings[key]}
+                    onChange={(e) =>
+                      setSettings({ ...settings, [key]: e.target.checked })
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <button
+              onClick={() => void saveSettings()}
+              disabled={saving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-white"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        )}
 
-    <label className="flex items-center gap-2 mb-3">
-      <input
-        type="checkbox"
-        checked={settings.evaluation_open}
-        onChange={(e) =>
-          setSettings({
-            ...settings,
-            evaluation_open: e.target.checked,
-          })
-        }
-      />
-      Evaluation Open
-    </label>
-
-    <div className="grid grid-cols-3 gap-3 mb-4">
-      {[
-        ["show_vi", "VI"],
-        ["show_vii", "VII"],
-        ["show_viii", "VIII"],
-        ["show_ix", "IX"],
-        ["show_x", "X"],
-        ["show_xi", "XI"],
-      ].map(([key, label]) => (
-        <label key={key} className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings[key]}
-            onChange={(e) =>
-              setSettings({
-                ...settings,
-                [key]: e.target.checked,
-              })
+        <button
+          onClick={async () => {
+            try {
+              await refreshStudentScreens();
+              alert("Student screens refreshed.");
+            } catch (e) {
+              console.error(e);
+              alert("Refresh failed.");
             }
-          />
-          {label}
-        </label>
-      ))}
-    </div>
+          }}
+          className="mb-4 w-full rounded-lg bg-indigo-600 text-white py-2 font-semibold hover:bg-indigo-700"
+        >
+          🔄 Refresh All Student Screens
+        </button>
 
-    <button
-      onClick={() => void saveSettings()}
-      disabled={saving}
-      className="rounded-lg bg-blue-600 px-4 py-2 text-white"
-    >
-      {saving ? "Saving..." : "Save"}
-    </button>
-  </div>
-)}
-<button
-  onClick={async () => {
-    try {
-      await refreshStudentScreens();
-      alert("Student screens refreshed.");
-    } catch (e) {
-      console.error(e);
-      alert("Refresh failed.");
-    }
-  }}
-  className="mt-6 w-full rounded-lg bg-indigo-600 text-white py-2 font-semibold hover:bg-indigo-700"
->
-  🔄 Refresh All Student Screens
-</button>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <TabBtn active={tab === "responses"} onClick={() => setTab("responses")}>Responses</TabBtn>
             <TabBtn active={tab === "teachers"} onClick={() => setTab("teachers")}>Teachers</TabBtn>
-            <TabBtn active={tab === "reports"} onClick={() => setTab("reports")}>
-             Reports
-          </TabBtn>
+            <TabBtn active={tab === "reports"} onClick={() => setTab("reports")}>Reports</TabBtn>
           </div>
           <button onClick={() => void logout()} className="text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 hover:bg-slate-100">
             Sign out
           </button>
         </div>
+
         {tab === "responses" && <ResponsesTab />}
-
-{tab === "teachers" && <TeachersTab />}
-{tab === "reports" && (
-  <div className="rounded-xl border bg-white p-6">
-    <h2 className="text-2xl font-bold mb-6">
-      Teacher Reports
-    </h2>
-
-    <table className="w-full border-collapse">
-      <thead>
-        <tr className="border-b">
-          <th className="text-left py-2">Teacher</th>
-          <th className="text-left py-2">Subject</th>
-          <th className="text-center py-2">Responses</th>
-          <th className="text-center py-2">Average</th>
-          <th className="text-center py-2">Actions</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {teacherSummary.map((t) => (
-          <tr key={t.teacher} className="border-b">
-            <td className="py-2">
-              <button
-                onClick={async () => {
-                  try {
-                    const r = await getTeacherDetails({
-                      data: {
-                        teacher: t.teacher,
-                        subject: t.subject,
-                        className: t.class,
-                        section: t.section,
-                      },
-                    });
-
-                    setSelectedTeacher(t);
-                    setTeacherDetails(r.rows);
-                  } catch (err) {
-                    console.error(err);
-                    alert("Error loading teacher details");
-                  }
-                }}
-                className="text-blue-600 hover:underline font-medium"
-              >
-                {t.teacher}
-              </button>
-            </td>
-            <td>{t.subject}</td>
-            <td className="text-center">{t.responses}</td>
-            <td className="text-center">⭐ {t.average}</td>
-            <td className="text-center">
-  <button
-    onClick={async () => {
-      try {
-        const report = await getTeacherReportData({
-          data: {
-            teacher: t.teacher,
-            subject: t.subject,
-            className: t.class,
-            section: t.section,
-          },
-        });
-
-        console.log(report);
-        alert("Report data ready");
-      } catch (e) {
-        console.error(e);
-        alert("Report generation failed");
-      }
-    }}
-    className="rounded-lg bg-blue-600 px-3 py-1 text-white text-sm"
-  >
-    📄 PDF
-  </button>
-</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-    {selectedTeacher && (
-      <div className="mt-8 rounded-xl border-2 border-blue-400 bg-blue-50 p-6 shadow-lg">
-        <h3 className="text-2xl font-bold">
-          {selectedTeacher.teacher}
-        </h3>
-
-        <p className="text-slate-600">
-          {selectedTeacher.subject} • Class {selectedTeacher.class} • Section {selectedTeacher.section}
-        </p>
-<div className="mt-4 grid grid-cols-2 gap-4">
-
-  <div className="rounded-lg bg-white p-4 shadow">
-    <p className="text-sm text-slate-500">
-      Average Rating
-    </p>
-    <p className="text-3xl font-bold text-blue-600">
-      ⭐ {averageRating} / 5
-    </p>
-  </div>
-
-  <div className="rounded-lg bg-white p-4 shadow">
-    <p className="text-sm text-slate-500">
-      Responses
-    </p>
-    <p className="text-3xl font-bold">
-      👥 {teacherDetails.length}
-    </p>
-  </div>
-
-</div>
-
-        <div className="mt-6">
-          <h4 className="font-semibold mb-2">
-            Student Comments
-          </h4>
-
-          {teacherDetails.map((r, i) => (
-            <div
-              key={i}
-              className="mb-2 rounded-lg border bg-white p-3"
-            >
-              {r.comment || (
-                <span className="text-slate-400">
-                  No comment
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </div>
-)}
+        {tab === "teachers" && <TeachersTab />}
+        {tab === "reports" && <ReportsTab teacherSummary={teacherSummary} />}
       </div>
     </div>
   );
 }
 
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+// =========================================================================
+// REPORTS TAB
+// =========================================================================
+function ReportsTab({ teacherSummary }: { teacherSummary: any[] }) {
+  const [classFilter, setClassFilter] = useState("All");
+  const [subjectFilter, setSubjectFilter] = useState("All");
+  const [selectedTeachers, setSelectedTeachers] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState<"all" | "selected">("all");
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
+  const [teacherDetails, setTeacherDetails] = useState<any[]>([]);
+
+  // Extract unique classes and subjects
+  const classes = useMemo(() => {
+    const set = new Set(teacherSummary.map((t: any) => t.class));
+    return ["All", ...Array.from(set).sort()];
+  }, [teacherSummary]);
+
+  const subjects = useMemo(() => {
+    const set = new Set(teacherSummary.map((t: any) => t.subject));
+    return ["All", ...Array.from(set).sort()];
+  }, [teacherSummary]);
+
+  // Filter teachers
+  const filteredTeachers = useMemo(() => {
+    return teacherSummary.filter((t: any) => {
+      if (classFilter !== "All" && t.class !== classFilter) return false;
+      if (subjectFilter !== "All" && t.subject !== subjectFilter) return false;
+      return true;
+    });
+  }, [teacherSummary, classFilter, subjectFilter]);
+
+  function toggleTeacher(teacher: string) {
+    setSelectedTeachers((prev) => {
+      const next = new Set(prev);
+      if (next.has(teacher)) next.delete(teacher);
+      else next.add(teacher);
+      return next;
+    });
+  }
+
+  function selectAllFiltered() {
+    setSelectedTeachers(new Set(filteredTeachers.map((t: any) => t.teacher)));
+  }
+
+  function clearSelection() {
+    setSelectedTeachers(new Set());
+  }
+
+   async function triggerDownload(url: string, filename: string) {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, "_blank");
+    }
+  }
+
+  async function downloadReport(teacher: string, format: "pdf" | "xlsx") {
+    setGenerating(`${teacher}-${format}`);
+    try {
+      const { getReportDownloadUrl } = await import("@/lib/reports.functions");
+      const r = await getReportDownloadUrl({ data: { teacher, format } });
+      const ext = format === "pdf" ? "pdf" : "xlsx";
+      const filename = format === "pdf" 
+        ? `${teacher}_Report.${ext}`
+        : `${teacher}.${ext}`;
+      triggerDownload(r.url, filename);
+    } catch (e) {
+      alert(`Failed to get ${format.toUpperCase()} for ${teacher}. Make sure the report has been generated.`);
+    } finally {
+      setGenerating(null);
+    }
+  }
+
+  async function downloadBatch(formats: ("pdf" | "xlsx")[]) {
+    const list = selectMode === "all"
+      ? filteredTeachers.map((t: any) => t.teacher)
+      : Array.from(selectedTeachers);
+
+    if (list.length === 0) {
+      alert("No teachers selected.");
+      return;
+    }
+
+    if (!confirm(`Download ${formats.join(" + ")} reports for ${list.length} teacher(s) as ZIP?`)) return;
+
+    setGenerating("batch");
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+
+      for (const teacher of list) {
+        for (const format of formats) {
+          try {
+            const { getReportDownloadUrl } = await import("@/lib/reports.functions");
+            const r = await getReportDownloadUrl({ data: { teacher, format } });
+            
+            // Fetch the file
+            const response = await fetch(r.url);
+            const blob = await response.blob();
+            
+            const ext = format === "pdf" ? "pdf" : "xlsx";
+            const filename = format === "pdf" 
+              ? `${teacher}_Report.${ext}`
+              : `${teacher}.${ext}`;
+            
+            zip.file(filename, blob);
+          } catch {
+            console.warn(`Skipping ${format} for ${teacher} — not found`);
+          }
+        }
+      }
+
+      // Generate and download ZIP
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Teacher_Reports_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("ZIP creation failed. Try downloading individually.");
+    } finally {
+      setGenerating(null);
+    }
+  }
+  const averageRating =
+    teacherDetails.length > 0
+      ? (
+          teacherDetails.reduce((total, r) => {
+            return (
+              total +
+              Number(r.q1) + Number(r.q2) + Number(r.q3) + Number(r.q4) + Number(r.q5) +
+              Number(r.q6) + Number(r.q7) + Number(r.q8) + Number(r.q9) + Number(r.q10)
+            );
+          }, 0) /
+          (teacherDetails.length * 10)
+        ).toFixed(2)
+      : "0.00";
+
   return (
-    <button onClick={onClick} className={
-      "px-4 py-2 rounded-lg text-sm font-medium " +
-      (active ? "bg-indigo-600 text-white" : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100")
-    }>{children}</button>
+    <div className="space-y-6">
+      {/* Header with batch buttons */}
+      <div className="rounded-xl border bg-white p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <h2 className="text-2xl font-bold text-slate-900">Teacher Reports</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-slate-900">Teacher Reports</h2>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => downloadBatch(["pdf"])}
+              disabled={generating !== null}
+              className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
+            >
+              {generating === "batch" ? "Preparing…" : "📄 Batch PDF"}
+            </button>
+            <button
+              onClick={() => downloadBatch(["xlsx"])}
+              disabled={generating !== null}
+              className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {generating === "batch" ? "Preparing…" : "📊 Batch Excel"}
+            </button>
+            <button
+              onClick={() => downloadBatch(["pdf", "xlsx"])}
+              disabled={generating !== null}
+              className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {generating === "batch" ? "Preparing…" : "📦 Both"}
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-slate-50 rounded-lg">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="selectMode"
+                checked={selectMode === "all"}
+                onChange={() => setSelectMode("all")}
+              />
+              All Teachers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="selectMode"
+                checked={selectMode === "selected"}
+                onChange={() => setSelectMode("selected")}
+              />
+              Selected
+            </label>
+          </div>
+
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {classes.map((c) => (
+              <option key={c} value={c}>{c === "All" ? "All Classes" : `Class ${c}`}</option>
+            ))}
+          </select>
+
+          <select
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {subjects.map((s) => (
+              <option key={s} value={s}>{s === "All" ? "All Subjects" : s}</option>
+            ))}
+          </select>
+
+          {selectMode === "selected" && (
+            <div className="flex gap-2">
+              <button onClick={selectAllFiltered} className="text-xs text-indigo-600 hover:underline">
+                Select all filtered
+              </button>
+              <button onClick={clearSelection} className="text-xs text-rose-600 hover:underline">
+                Clear
+              </button>
+            </div>
+          )}
+
+          <div className="ml-auto text-sm text-slate-500">
+            {selectMode === "all"
+              ? `${filteredTeachers.length} teacher(s)`
+              : `${selectedTeachers.size} of ${filteredTeachers.length} selected`
+            }
+          </div>
+        </div>
+
+        {/* Teacher table */}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b bg-slate-50">
+                {selectMode === "selected" && (
+                  <th className="px-2 py-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={selectedTeachers.size === filteredTeachers.length && filteredTeachers.length > 0}
+                      onChange={() => {
+                        if (selectedTeachers.size === filteredTeachers.length) {
+                          clearSelection();
+                        } else {
+                          selectAllFiltered();
+                        }
+                      }}
+                    />
+                  </th>
+                )}
+                <th className="text-left px-3 py-2 text-sm font-medium text-slate-600">Teacher</th>
+                <th className="text-left px-3 py-2 text-sm font-medium text-slate-600">Class</th>
+                <th className="text-left px-3 py-2 text-sm font-medium text-slate-600">Subject</th>
+                <th className="text-center px-3 py-2 text-sm font-medium text-slate-600">Responses</th>
+                <th className="text-center px-3 py-2 text-sm font-medium text-slate-600">Average</th>
+                <th className="text-center px-3 py-2 text-sm font-medium text-slate-600">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTeachers.map((t: any) => (
+                <tr key={`${t.teacher}-${t.class}-${t.section}-${t.subject}`} className="border-b hover:bg-slate-50">
+                  {selectMode === "selected" && (
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedTeachers.has(t.teacher)}
+                        onChange={() => toggleTeacher(t.teacher)}
+                      />
+                    </td>
+                  )}
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const r = await getTeacherDetails({
+                            data: {
+                              teacher: t.teacher,
+                              subject: t.subject,
+                              className: t.class,
+                              section: t.section,
+                            },
+                          });
+                          setSelectedTeacher(t);
+                          setTeacherDetails(r.rows);
+                        } catch (err) {
+                          console.error(err);
+                          alert("Error loading teacher details");
+                        }
+                      }}
+                      className="text-blue-600 hover:underline font-medium"
+                    >
+                      {t.teacher}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{t.class}-{t.section}</td>
+                  <td className="px-3 py-2 text-slate-600">{t.subject}</td>
+                  <td className="px-3 py-2 text-center">{t.responses}</td>
+                  <td className="px-3 py-2 text-center font-semibold">⭐ {t.average}</td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => downloadReport(t.teacher, "pdf")}
+                        disabled={generating !== null}
+                        className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                      >
+                        {generating === `${t.teacher}-pdf` ? "…" : "📄 PDF"}
+                      </button>
+                      <button
+                        onClick={() => downloadReport(t.teacher, "xlsx")}
+                        disabled={generating !== null}
+                        className="rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
+                      >
+                        {generating === `${t.teacher}-xlsx` ? "…" : "📊 Excel"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredTeachers.length === 0 && (
+                <tr>
+                  <td colSpan={selectMode === "selected" ? 7 : 6} className="p-6 text-center text-slate-500">
+                    No teachers match the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Teacher detail panel */}
+      {selectedTeacher && (
+        <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-bold">{selectedTeacher.teacher}</h3>
+            <button
+              onClick={() => { setSelectedTeacher(null); setTeacherDetails([]); }}
+              className="text-sm text-slate-500 hover:text-slate-700"
+            >
+              ✕ Close
+            </button>
+          </div>
+          <p className="text-slate-600">
+            {selectedTeacher.subject} • Class {selectedTeacher.class} • Section {selectedTeacher.section}
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="rounded-lg bg-white p-4 shadow">
+              <p className="text-sm text-slate-500">Average Rating</p>
+              <p className="text-3xl font-bold text-blue-600">⭐ {averageRating} / 5</p>
+            </div>
+            <div className="rounded-lg bg-white p-4 shadow">
+              <p className="text-sm text-slate-500">Responses</p>
+              <p className="text-3xl font-bold">👥 {teacherDetails.length}</p>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h4 className="font-semibold mb-2">Student Comments</h4>
+            {teacherDetails.map((r, i) => (
+              <div key={i} className="mb-2 rounded-lg border bg-white p-3">
+                {r.comment || <span className="text-slate-400">No comment</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
+// =========================================================================
+// RESPONSES TAB
+// =========================================================================
 function ResponsesTab() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -635,6 +874,9 @@ function ResponsesTab() {
   );
 }
 
+// =========================================================================
+// TEACHERS TAB
+// =========================================================================
 function TeachersTab() {
   const [rows, setRows] = useState<Teacher[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -786,6 +1028,18 @@ function TeacherForm({ value, busy, onCancel, onSave }: {
         </div>
       </div>
     </div>
+  );
+}
+
+// =========================================================================
+// SHARED COMPONENTS
+// =========================================================================
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={
+      "px-4 py-2 rounded-lg text-sm font-medium " +
+      (active ? "bg-indigo-600 text-white" : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100")
+    }>{children}</button>
   );
 }
 

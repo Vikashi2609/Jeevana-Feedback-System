@@ -6,7 +6,7 @@ from supabase_connection import (
 
 from processor import build_teacher_data
 from pdf_report import create_teacher_pdf
-from xlsx_report import create_teacher_workbook
+from excel_report import create_teacher_workbook
 
 teachers = get_all_teachers()
 
