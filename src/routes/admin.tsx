@@ -142,7 +142,9 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"responses" | "teachers" | "reports">("responses");
+  const [tab, setTab] = useState<
+  "responses" | "teachers" | "reports" | "settings"
+  >("responses");
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [teacherSummary, setTeacherSummary] = useState<any[]>([]);
@@ -194,7 +196,28 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       setSaving(false);
     }
   }
+useEffect(() => {
+  loadTeacherSummary();
+}, []);
 
+useEffect(() => {
+  async function loadSettings() {
+    try {
+      const r = await getSystemSettings();
+      setSettings(r.settings);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  loadSettings();
+}, []);
+
+useEffect(() => {
+  if (tab === "reports" && teacherSummary.length === 0) {
+    loadTeacherSummary();
+  }
+}, [tab]);
   async function logout() {
     try {
       await adminLogout();
@@ -285,15 +308,25 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <TabBtn active={tab === "responses"} onClick={() => setTab("responses")}>Responses</TabBtn>
             <TabBtn active={tab === "teachers"} onClick={() => setTab("teachers")}>Teachers</TabBtn>
             <TabBtn active={tab === "reports"} onClick={() => setTab("reports")}>Reports</TabBtn>
+            <TabBtn active={tab === "settings"} onClick={() => setTab("settings")}>Settings</TabBtn>
           </div>
+
           <button onClick={() => void logout()} className="text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 hover:bg-slate-100">
             Sign out
           </button>
-        </div>
+        </div> 
 
         {tab === "responses" && <ResponsesTab />}
         {tab === "teachers" && <TeachersTab />}
         {tab === "reports" && <ReportsTab teacherSummary={teacherSummary} />}
+{tab === "settings" && (
+  <SettingsTab
+    settings={settings}
+    setSettings={setSettings}
+    saveSettings={saveSettings}
+    saving={saving}
+  />
+)}
       </div>
     </div>
   );
@@ -437,6 +470,72 @@ function ReportsTab({ teacherSummary }: { teacherSummary: any[] }) {
       setGenerating(null);
     }
   }
+  function SettingsTab({
+  settings,
+  setSettings,
+  saveSettings,
+  saving,
+}: {
+  settings: any;
+  setSettings: any;
+  saveSettings: () => void;
+  saving: boolean;
+}) {
+  if (!settings) return <div>Loading...</div>;
+
+  return (
+    <div className="rounded-xl border bg-white p-6 space-y-6">
+      <h2 className="text-2xl font-bold">System Settings</h2>
+
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={settings.evaluation_open}
+          onChange={(e) =>
+            setSettings({
+              ...settings,
+              evaluation_open: e.target.checked,
+            })
+          }
+        />
+        Evaluation Open
+      </label>
+
+      <h3 className="font-semibold mt-4">Available Classes</h3>
+
+      {[
+        ["show_vi", "VI"],
+        ["show_vii", "VII"],
+        ["show_viii", "VIII"],
+        ["show_ix", "IX"],
+        ["show_x", "X"],
+        ["show_xi", "XI"],
+      ].map(([key, label]) => (
+        <label key={key} className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={settings[key]}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                [key]: e.target.checked,
+              })
+            }
+          />
+          Class {label}
+        </label>
+      ))}
+
+      <button
+        onClick={saveSettings}
+        disabled={saving}
+        className="rounded-lg bg-blue-600 text-white px-4 py-2"
+      >
+        {saving ? "Saving..." : "Save Settings"}
+      </button>
+    </div>
+  );
+}
   const averageRating =
     teacherDetails.length > 0
       ? (
