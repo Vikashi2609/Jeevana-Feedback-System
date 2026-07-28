@@ -1,0 +1,5 @@
+reportlab
+matplotlib
+openpyxl
+supabase
+python-dotenv
