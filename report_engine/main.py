@@ -1,11 +1,12 @@
-from excel_report import create_teacher_workbook
 from supabase_connection import (
     get_teacher_responses,
     get_all_teachers,
+    upload_teacher_report,
 )
 
 from processor import build_teacher_data
 from pdf_report import create_teacher_pdf
+from xlsx_report import create_teacher_workbook
 
 teachers = get_all_teachers()
 
@@ -27,5 +28,8 @@ for teacher in teachers:
         rows
     )
 
-    create_teacher_pdf(teacher_data)
-    create_teacher_workbook(teacher_data)     
+    pdf_path = create_teacher_pdf(teacher_data)
+    xlsx_path = create_teacher_workbook(teacher_data)
+
+    upload_teacher_report(pdf_path, teacher, kind="pdf")
+    upload_teacher_report(xlsx_path, teacher, kind="xlsx")

@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  getTeacherSummary,
+  getTeacherDetails,
+  getTeacherReportData,
+} from "@/lib/reports.functions";
+import {
   adminLogin,
   adminLogout,
   adminStatus,
@@ -137,13 +142,23 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"responses" | "teachers">("responses");
+  const [tab, setTab] = useState<
+  "responses" | "teachers" | "reports"
+>("responses");
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
+  const [teacherSummary, setTeacherSummary] = useState<any[]>([]);
+const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
+const [teacherDetails, setTeacherDetails] = useState<any[]>([]);
+useEffect(() => {
   getSystemSettings()
     .then((r) => setSettings(r.settings))
-    .catch((e) => console.error(e));
+    .catch(console.error);
+}, []);
+useEffect(() => {
+  getTeacherSummary()
+    .then((r) => setTeacherSummary(r.teachers))
+    .catch(console.error);
 }, []);
 async function saveSettings() {
   if (!settings) return;
@@ -184,6 +199,28 @@ async function logout() {
   }
   onLogout();
 }
+
+const averageRating =
+  teacherDetails.length > 0
+    ? (
+        teacherDetails.reduce((total, r) => {
+          return (
+            total +
+            Number(r.q1) +
+            Number(r.q2) +
+            Number(r.q3) +
+            Number(r.q4) +
+            Number(r.q5) +
+            Number(r.q6) +
+            Number(r.q7) +
+            Number(r.q8) +
+            Number(r.q9) +
+            Number(r.q10)
+          );
+        }, 0) /
+        (teacherDetails.length * 10)
+      ).toFixed(2)
+    : "0.00";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -260,12 +297,147 @@ async function logout() {
           <div className="flex items-center gap-2">
             <TabBtn active={tab === "responses"} onClick={() => setTab("responses")}>Responses</TabBtn>
             <TabBtn active={tab === "teachers"} onClick={() => setTab("teachers")}>Teachers</TabBtn>
+            <TabBtn active={tab === "reports"} onClick={() => setTab("reports")}>
+             Reports
+          </TabBtn>
           </div>
           <button onClick={() => void logout()} className="text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 hover:bg-slate-100">
             Sign out
           </button>
         </div>
-        {tab === "responses" ? <ResponsesTab /> : <TeachersTab />}
+        {tab === "responses" && <ResponsesTab />}
+
+{tab === "teachers" && <TeachersTab />}
+{tab === "reports" && (
+  <div className="rounded-xl border bg-white p-6">
+    <h2 className="text-2xl font-bold mb-6">
+      Teacher Reports
+    </h2>
+
+    <table className="w-full border-collapse">
+      <thead>
+        <tr className="border-b">
+          <th className="text-left py-2">Teacher</th>
+          <th className="text-left py-2">Subject</th>
+          <th className="text-center py-2">Responses</th>
+          <th className="text-center py-2">Average</th>
+          <th className="text-center py-2">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {teacherSummary.map((t) => (
+          <tr key={t.teacher} className="border-b">
+            <td className="py-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await getTeacherDetails({
+                      data: {
+                        teacher: t.teacher,
+                        subject: t.subject,
+                        className: t.class,
+                        section: t.section,
+                      },
+                    });
+
+                    setSelectedTeacher(t);
+                    setTeacherDetails(r.rows);
+                  } catch (err) {
+                    console.error(err);
+                    alert("Error loading teacher details");
+                  }
+                }}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                {t.teacher}
+              </button>
+            </td>
+            <td>{t.subject}</td>
+            <td className="text-center">{t.responses}</td>
+            <td className="text-center">⭐ {t.average}</td>
+            <td className="text-center">
+  <button
+    onClick={async () => {
+      try {
+        const report = await getTeacherReportData({
+          data: {
+            teacher: t.teacher,
+            subject: t.subject,
+            className: t.class,
+            section: t.section,
+          },
+        });
+
+        console.log(report);
+        alert("Report data ready");
+      } catch (e) {
+        console.error(e);
+        alert("Report generation failed");
+      }
+    }}
+    className="rounded-lg bg-blue-600 px-3 py-1 text-white text-sm"
+  >
+    📄 PDF
+  </button>
+</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    {selectedTeacher && (
+      <div className="mt-8 rounded-xl border-2 border-blue-400 bg-blue-50 p-6 shadow-lg">
+        <h3 className="text-2xl font-bold">
+          {selectedTeacher.teacher}
+        </h3>
+
+        <p className="text-slate-600">
+          {selectedTeacher.subject} • Class {selectedTeacher.class} • Section {selectedTeacher.section}
+        </p>
+<div className="mt-4 grid grid-cols-2 gap-4">
+
+  <div className="rounded-lg bg-white p-4 shadow">
+    <p className="text-sm text-slate-500">
+      Average Rating
+    </p>
+    <p className="text-3xl font-bold text-blue-600">
+      ⭐ {averageRating} / 5
+    </p>
+  </div>
+
+  <div className="rounded-lg bg-white p-4 shadow">
+    <p className="text-sm text-slate-500">
+      Responses
+    </p>
+    <p className="text-3xl font-bold">
+      👥 {teacherDetails.length}
+    </p>
+  </div>
+
+</div>
+
+        <div className="mt-6">
+          <h4 className="font-semibold mb-2">
+            Student Comments
+          </h4>
+
+          {teacherDetails.map((r, i) => (
+            <div
+              key={i}
+              className="mb-2 rounded-lg border bg-white p-3"
+            >
+              {r.comment || (
+                <span className="text-slate-400">
+                  No comment
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+)}
       </div>
     </div>
   );
